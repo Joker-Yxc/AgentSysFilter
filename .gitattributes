@@ -1,0 +1,12 @@
+# Mark frontend scaffold inherited from pure-admin-thin as vendored for GitHub Linguist.
+# Upstream: https://github.com/pure-admin/pure-admin-thin
+
+frontend/** linguist-vendored
+
+# ASRS-specific frontend additions remain first-party code.
+frontend/public/ai.jpg -linguist-vendored
+frontend/public/static/** -linguist-vendored
+frontend/src/api/multiAgentWorkbench.ts -linguist-vendored
+frontend/src/assets/agents/** -linguist-vendored
+frontend/src/router/modules/multiAgentWorkbench.ts -linguist-vendored
+frontend/src/views/multi-agent-workbench/** -linguist-vendored
