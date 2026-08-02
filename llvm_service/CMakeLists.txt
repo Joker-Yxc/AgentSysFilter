@@ -9,6 +9,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 find_package(LLVM REQUIRED CONFIG)
 message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION} at ${LLVM_DIR}")
 include_directories(${LLVM_INCLUDE_DIRS})
+# If using Arch Linux, comment out the two lines below.
 add_definitions(${LLVM_DEFINITIONS})
 llvm_map_components_to_libnames(LLVM_LIBS core irReader support analysis debugInfoDWARF)
 
@@ -18,6 +19,8 @@ find_package(nlohmann_json REQUIRED)
 # ── shared IR module (compiled once, linked into daemon) ──────────────────────
 add_library(ir_module STATIC src/ir_module.cpp)
 target_link_libraries(ir_module PUBLIC ${LLVM_LIBS})
+#If using Arch Linux, use the following line.
+#target_link_libraries(ir_module PUBLIC LLVM-20)
 
 # ── asrs-ird : daemon ─────────────────────────────────────────────────────────
 add_executable(asrs-ird src/daemon.cpp)

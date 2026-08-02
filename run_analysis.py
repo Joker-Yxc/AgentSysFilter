@@ -14,8 +14,18 @@ import json
 import logging
 import os
 import sys
+from pathlib import Path
+from typing import Any, cast
 
-from asrs.workflows.arg_analysis import build_analysis_graph
+
+_HAS_AGENT_CONFIGURATION = bool(
+    os.getenv("DEEPSEEK_API_KEY") or Path(".env").is_file()
+)
+if not _HAS_AGENT_CONFIGURATION:
+    # The shared config validates this setting at import time. The placeholder
+    # is process-local and is never used because the Agent workflow is skipped.
+    os.environ["DEEPSEEK_API_KEY"] = "fallback-only"
+
 
 if os.getenv("ASRS_DEBUG"):
     logging.basicConfig(
@@ -24,10 +34,13 @@ if os.getenv("ASRS_DEBUG"):
         stream=sys.stderr,
     )
 
+
 async def main():
     if len(sys.argv) < 2:
         print(__doc__)
         sys.exit(1)
+    from asrs.tools.ir_client import run_command
+    from asrs.workflows.global_analysis import run_llvm_fallback
 
     ir_path = sys.argv[1]
     raw_args = sys.argv[2:]
@@ -51,8 +64,6 @@ async def main():
     else:
         active_params = args        # specific flags, e.g. -n -s
 
-    graph = build_analysis_graph()
-
     print(f"Analyzing: {ir_path}")
     if active_params is None:
         print("Active params: ALL (unconstrained)\n")
@@ -61,14 +72,62 @@ async def main():
     else:
         print(f"Active params: {' '.join(active_params)}\n")
 
-    state = await graph.ainvoke({
-        "ir_path": ir_path,
-        "active_params": active_params,
-    })
+    state: dict[str, Any]
+    if _HAS_AGENT_CONFIGURATION:
+        from asrs.core.models import PipelineState
+        from asrs.workflows.arg_analysis import build_analysis_graph
+
+        graph = build_analysis_graph()
+        state = cast(
+            dict[str, Any],
+            await graph.ainvoke(
+                cast(
+                    PipelineState,
+                    cast(
+                        object,
+                        {
+                            "ir_path": ir_path,
+                            "active_params": active_params,
+                        },
+                    ),
+                )
+            ),
+        )
+    else:
+        try:
+            fallback_ir_path = str(Path(ir_path).expanduser().resolve())
+            load_result = run_command("load", fallback_ir_path)
+            if isinstance(load_result, dict) and load_result.get("error"):
+                raise RuntimeError(str(load_result["error"]))
+        except RuntimeError as exc:
+            print(f"Error: failed to load IR for LLVM fallback: {exc}", file=sys.stderr)
+            sys.exit(1)
+        state = {
+            "error": (
+                "DEEPSEEK_API_KEY is not configured; "
+                "Agent analysis was skipped"
+            )
+        }
 
     if state.get("error"):
-        print(f"Error: {state['error']}")
-        sys.exit(1)
+        analysis_error = str(state["error"])
+        print(
+            f"Agent analysis failed: {analysis_error}\n"
+            "Running LLVM full-IR fallback.",
+            file=sys.stderr,
+        )
+        try:
+            fallback = await run_llvm_fallback("agent workflow", analysis_error)
+        except Exception as fallback_exc:
+            print(
+                f"Error: {analysis_error}; LLVM fallback failed: {fallback_exc}",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
+        state.update(fallback)
+        state.pop("error", None)
+        print("LLVM full-IR fallback completed.\n", file=sys.stderr)
 
     if state.get("arg_analysis"):
         print("=== CLI Argument Analysis ===")
@@ -90,4 +149,6 @@ async def main():
                 f.write(f"[{role}]\n{content}\n\n{'─'*60}\n\n")
         print(f"\nAgent messages saved to: {save_messages_path}")
 
-asyncio.run(main())
+
+if __name__ == "__main__":
+    asyncio.run(main())
