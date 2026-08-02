@@ -100,6 +100,9 @@ public:
     std::vector<std::string> getCallees(const std::string& func) const;
     // Functions that directly call func.
     std::vector<std::string> getCallers(const std::string& func) const;
+    // Scan every call instruction without traversing the call graph.
+    // Returns directly called external, non-intrinsic functions.
+    std::vector<std::string> calledApisInModule() const;
 
     // ── control flow ────────────────────────────────────────────────────────
     // labels: if non-empty, return only blocks with those labels (e.g. "6", "%6", "entry").

@@ -1116,6 +1116,37 @@ std::vector<LocalVarInfo> IrModule::getDebugInfo(const std::string& func_name) c
 }
 
 // ---------------------------------------------------------------------------
+// direct API call scan
+// ---------------------------------------------------------------------------
+
+std::vector<std::string> IrModule::calledApisInModule() const {
+    if (!module_) return {};
+
+    std::set<std::string> apis;
+    for (const auto& function : *module_) {
+        for (const auto& block : function) {
+            for (const auto& inst : block) {
+                const auto* call = llvm::dyn_cast<llvm::CallBase>(&inst);
+                if (!call) continue;
+
+                const llvm::Value* called_operand = call->getCalledOperand();
+                if (!called_operand) continue;
+
+                called_operand = called_operand->stripPointerCasts();
+                const auto* callee = llvm::dyn_cast<llvm::Function>(called_operand);
+                if (!callee || !callee->isDeclaration() || callee->isIntrinsic()) {
+                    continue;
+                }
+                apis.insert(callee->getName().str());
+            }
+        }
+    }
+
+    return {apis.begin(), apis.end()};
+}
+
+
+// ---------------------------------------------------------------------------
 // reachability (call-graph BFS)
 // ---------------------------------------------------------------------------
 

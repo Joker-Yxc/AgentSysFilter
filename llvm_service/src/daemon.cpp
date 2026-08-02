@@ -238,6 +238,10 @@ static json dispatchSession(Session& session, const json& req) {
         return ok({{"internal", r.internal_calls}, {"external", r.external_calls}});
     }
 
+    // ── called_apis_in_module ─────────────────────────────────────────────────
+    if (cmd == "called_apis_in_module")
+        return ok(mod.calledApisInModule());
+
     // ── reachable_apis ────────────────────────────────────────────────────────
     if (cmd == "reachable_apis") {
         if (!req.contains("funcs") || !req["funcs"].is_array())

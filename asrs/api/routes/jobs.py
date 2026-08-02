@@ -1,15 +1,18 @@
-import asyncio
-
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 
 from asrs.api.schemas import JobRequest, JobResponse
 from asrs.storage import job_store
 from asrs.workflows.arg_analysis import build_analysis_graph
+from asrs.workflows.global_analysis import run_llvm_fallback
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
 
-async def _run_workflow(job_id: str, ir_path: str, active_params):
+async def _run_workflow(
+    job_id: str,
+    ir_path: str,
+    active_params: list[str] | None,
+) -> None:
     graph = build_analysis_graph()
     initial_state = {"ir_path": ir_path, "active_params": active_params}
 
@@ -20,7 +23,46 @@ async def _run_workflow(job_id: str, ir_path: str, active_params):
                     continue
                 error = node_output.get("error")
                 if error:
-                    job_store.push_event(job_id, node_name, "error", error=error)
+                    try:
+                        fallback = await run_llvm_fallback(node_name, str(error))
+                    except Exception as fallback_exc:
+                        combined_error = (
+                            f"{error}; LLVM fallback failed: {fallback_exc}"
+                        )
+                        job_store.push_event(
+                            job_id,
+                            node_name,
+                            "error",
+                            error=combined_error,
+                        )
+                        return
+
+                    job_store.push_event(
+                        job_id,
+                        node_name,
+                        "done",
+                        data={
+                            "analysis_fallback": {
+                                "backend": "llvm_service",
+                                "mode": "all_call_instructions",
+                                "failed_stage": node_name,
+                            }
+                        },
+                        error=str(error),
+                    )
+                    job_store.push_event(
+                        job_id,
+                        "analyze_libc_apis",
+                        "done",
+                        data={"libc_result": fallback["libc_result"]},
+                    )
+                    job_store.push_event(
+                        job_id,
+                        "libc_api_to_syscalls",
+                        "done",
+                        data={"syscall_result": fallback["syscall_result"]},
+                    )
+                    job_store.push_event(job_id, "pipeline", "done")
                     return
                 # strip None values for cleaner storage
                 data = {k: v for k, v in node_output.items() if v is not None}

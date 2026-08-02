@@ -27,6 +27,7 @@ _SESSION_SCOPED_COMMANDS = frozenset({
     "debuginfo",
     "cfg_reachable",
     "reachable_apis",
+    "called_apis_in_module",
     "global_element",
     "global_search",
 })

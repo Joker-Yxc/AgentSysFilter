@@ -33,6 +33,7 @@ static void usage() {
         "  debuginfo <name>        Debug locals in <name>\n"
         "  cfg_reachable <func> [var=val ...]  CFG traversal with const prop\n"
         "  reachable_apis <f>...   BFS from given functions, collect glibc APIs\n"
+        "  called_apis_in_module   Scan all call instructions for directly called libc APIs\n"
         "  global_element <name> [idx ...] [--show]  Get element at path; no idx = whole global metadata\n"
         "  global_search <name> <value>              Search global for value; returns all matching paths\n"
         "  at_scope <func>                           Show confined call sites for an address-taken function\n"
@@ -66,7 +67,9 @@ static json buildRequest(int argc, char* argv[], int start, bool& requires_sessi
         if (start + 1 >= argc) { std::cerr << "load requires <path>\n"; return json(); }
         return {{"cmd", "load"}, {"path", argv[start + 1]}};
     }
-    if (cmd == "functions" || cmd == "globals" || cmd == "unload")
+    if (cmd == "functions" || cmd == "globals" ||
+        cmd == "called_apis_in_module" ||
+        cmd == "unload")
         return {{"cmd", cmd}};
 
     if (cmd == "metadata") {

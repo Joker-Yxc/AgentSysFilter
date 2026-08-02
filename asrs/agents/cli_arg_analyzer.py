@@ -113,31 +113,32 @@ async def analyze_args_from_ir(state: PipelineState) -> dict:
                 "Determine which values can be concretely fixed and record them."
             ).format(applet=applet)
 
-    llm = get_llm(temperature=0.0)
-    agent = create_agent(llm, tools=get_all_tools())
-
-    exploration_result = await agent.ainvoke({
-        "messages": [
-            SystemMessage(content=exploration_prompt),
-            HumanMessage(content=(
-                f"Analyze the argument handling of '{applet}'. "
-                f"The IR module is already loaded. "
-                f"SCENARIO: {params_desc}\n\n"
-                f"ANALYSIS TASK: {analysis_focus}\n\n"
-                f"IMPORTANT: Start with list_functions, then examine main (or {applet}_main if present). "
-                f"Follow callees as needed. Determine which values can be concretely fixed "
-                f"given the arguments above, and which functions those values affect."
-            )),
-        ]
-    })
-
-    exploration_messages = exploration_result["messages"]
-
-    extractor = get_llm(temperature=0.0).bind(response_format={"type": "json_object"}).with_structured_output(
-        ArgAnalysis, method="json_mode"
-    )
-
+    exploration_messages = []
     try:
+        llm = get_llm(temperature=0.0)
+        agent = create_agent(llm, tools=get_all_tools())
+
+        exploration_result = await agent.ainvoke({
+            "messages": [
+                SystemMessage(content=exploration_prompt),
+                HumanMessage(content=(
+                    f"Analyze the argument handling of '{applet}'. "
+                    f"The IR module is already loaded. "
+                    f"SCENARIO: {params_desc}\n\n"
+                    f"ANALYSIS TASK: {analysis_focus}\n\n"
+                    f"IMPORTANT: Start with list_functions, then examine main (or {applet}_main if present). "
+                    f"Follow callees as needed. Determine which values can be concretely fixed "
+                    f"given the arguments above, and which functions those values affect."
+                )),
+            ]
+        })
+        exploration_messages = exploration_result["messages"]
+
+        extractor = (
+            get_llm(temperature=0.0)
+            .bind(response_format={"type": "json_object"})
+            .with_structured_output(ArgAnalysis, method="json_mode")
+        )
         result: ArgAnalysis = await extractor.ainvoke([
             SystemMessage(content=extraction_prompt),
             *exploration_messages,

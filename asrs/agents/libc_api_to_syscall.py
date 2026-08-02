@@ -6,6 +6,7 @@ import logging
 import re
 from dataclasses import dataclass
 from functools import lru_cache
+from itertools import chain
 from pathlib import Path
 from typing import Iterable
 
@@ -22,6 +23,12 @@ __all__ = [
     "resolve_apis",
     "resolve_syscalls",
 ]
+
+# Extend this tuple when static analysis needs additional conservative allowances.
+ADDITIONAL_SYSCALLS: tuple[str, ...] = (
+    "getrandom",
+)
+
 
 MODULE_ROOT = Path(__file__).resolve().parent
 DEFAULT_DATA_DIR = MODULE_ROOT / "confine_data"
@@ -158,6 +165,10 @@ def ordered_unique(items: Iterable[str]) -> list[str]:
             seen.add(item)
             output.append(item)
     return output
+
+
+def init_with_additional_syscalls(syscalls: Iterable[str]) -> list[str]:
+    return ordered_unique(chain(syscalls, ADDITIONAL_SYSCALLS))
 
 
 def discover_data_paths(data_dir: str | Path | None = None) -> DataPaths:
@@ -536,10 +547,15 @@ async def libc_api_to_syscalls(state: PipelineState) -> dict:
 
     libc_result = state.get("libc_result")
     if libc_result is None or not libc_result.apis:
+        required_syscalls = init_with_additional_syscalls(())
         return {
             "syscall_result": SyscallResult(
-                syscalls=[],
-                notes="No APIs to resolve.",
+                syscalls=required_syscalls,
+                notes=(
+                    "No APIs to resolve. Additional syscalls included: "
+                    + ", ".join(ADDITIONAL_SYSCALLS)
+                    + "."
+                ),
             ),
         }
 
@@ -557,11 +573,14 @@ async def libc_api_to_syscalls(state: PipelineState) -> dict:
                 "Unmapped syscall numbers: "
                 + ", ".join(str(n) for n in result.unmapped_syscall_numbers)
             )
-        notes = "; ".join(notes_parts) if notes_parts else "All APIs resolved successfully."
+        notes_parts.append(
+            "Additional syscalls included: " + ", ".join(ADDITIONAL_SYSCALLS)
+        )
+        notes = "; ".join(notes_parts)
 
         return {
             "syscall_result": SyscallResult(
-                syscalls=result.syscall_names,
+                syscalls=init_with_additional_syscalls(result.syscall_names),
                 notes=notes,
             ),
         }
