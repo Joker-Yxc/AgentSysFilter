@@ -26,7 +26,14 @@ __all__ = [
 
 # Extend this tuple when static analysis needs additional conservative allowances.
 ADDITIONAL_SYSCALLS: tuple[str, ...] = (
-    "getrandom",
+    "getrandom", "access", "close", "exit_group", "fstat", "getrandom", "mmap",
+    "mprotect", "newfstatat", "openat", "read", "clock_nanosleep",
+    "connect", "dup2", "epoll_create1", "epoll_ctl", "epoll_wait",
+    "fchmodat2", "fcntl", "getegid", "geteuid", "getgid", "mknodat",
+    "pipe2", "recvfrom", "renameat2", "rmdir", "rt_sigreturn",
+    "sched_getaffinity", "sendto", "setpgid", "socket",
+    "splice", "statfs", "statx", "timerfd_create",
+    "timerfd_settime", "umask", "unlinkat","utimensat", "write"
 )
 
 
