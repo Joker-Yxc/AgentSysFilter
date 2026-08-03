@@ -43,84 +43,108 @@ Given an application's LLVM IR and a target service scenario, AgentSysFilter use
 
 ## Quick Start
 
+Run all commands below from the repository root unless a command explicitly changes directories.
+
 ### 0. Requirements
 
 - Linux or WSL
 - Python 3.11
 - LLVM/Clang 20, `llvm-config`, CMake, and a C++ compiler
-- Node.js 18+ and pnpm 9+
-- A DeepSeek/OpenAI-compatible API key
+- Node.js 18.18+ and pnpm 9+
+- A DeepSeek API key
 
-On Ubuntu/Debian:
+On Ubuntu/Debian, install the system dependencies first:
 
 ```bash
 sudo apt update
 sudo apt install -y python3 python3-venv python3-pip cmake build-essential llvm clang llvm-dev nlohmann-json3-dev
 corepack enable
-corepack prepare pnpm@latest --activate
+corepack prepare pnpm@9 --activate
 ```
+
+AgentSysFilter was tested with LLVM/Clang 20. Confirm that `llvm-config` is available and points to the LLVM installation that will parse your IR:
+
+```bash
+llvm-config --version
+llvm-config --cmakedir
+```
+
+If your distribution installs versioned LLVM binaries, replace `llvm-config` in the commands below with the corresponding command, such as `llvm-config-20`. Use the same LLVM major version to generate and analyze LLVM IR whenever possible.
 
 ### 1. Configuration
 
-Create the backend configuration file:
+Clone the repository and create the backend configuration file:
 
 ```bash
-git clone https://github.com/gresces/AgentSysFilter.git
+git clone https://github.com/Joker-Yxc/AgentSysFilter.git
 cd AgentSysFilter
 cp .env.example .env
 ```
 
-Edit `.env` and set your API key.
+Edit `.env` and replace the placeholder API key:
+
+```dotenv
+DEEPSEEK_API_KEY=your_deepseek_api_key
+DEEPSEEK_MODEL=deepseek-v4-pro
+DEEPSEEK_BASE_URL=https://api.deepseek.com
+```
+
+The `.env` file is ignored by Git. Do not place a real API key in `.env.example` or commit it to the repository.
 
 ### 2. Backend Setup
 
-Build the LLVM analysis backend with CMake:
+Build the LLVM analysis service from the repository root:
 
 ```bash
-cd ASRS/llvm_service
-cmake -S . -B build -DLLVM_DIR="$(llvm-config --cmakedir)" -DCMAKE_BUILD_TYPE=Release
-cmake --build build
+cmake -S llvm_service -B llvm_service/build \
+  -DLLVM_DIR="$(llvm-config --cmakedir)" \
+  -DCMAKE_BUILD_TYPE=Release
+cmake --build llvm_service/build -j
 ```
 
-Install the Python backend dependencies:
+The build should produce both `llvm_service/build/asrs-ird` and `llvm_service/build/asrs-ir`.
+
+Create the Python virtual environment and install the backend dependencies:
 
 ```bash
-cd ASRS
 python3 -m venv .venv
+.venv/bin/python -m pip install --upgrade pip
 .venv/bin/pip install -r requirements.txt
 ```
 
 ### 3. Frontend Setup
 
-Install and build the frontend:
+Install the frontend dependencies using the committed lockfile:
 
 ```bash
-cd ASRS/frontend
-pnpm install && pnpm build
+cd frontend
+pnpm install --frozen-lockfile
+cd ..
 ```
 
-For development, use:
+Optionally verify that the production frontend builds successfully:
 
 ```bash
-cd ASRS/frontend
-pnpm install && pnpm dev
+cd frontend
+pnpm build
+cd ..
 ```
-
-The development server runs at `http://127.0.0.1:8848`.
 
 ## Run
 
-Start the LLVM IR analysis daemon:
+Start the following three processes in separate terminals. In each terminal, change to the `AgentSysFilter` repository root first.
+
+**Terminal 1 - LLVM IR analysis daemon:**
 
 ```bash
-cd ASRS
 ./llvm_service/build/asrs-ird
 ```
 
-In a second terminal, start the FastAPI backend:
+The daemon should report that it is listening on `/tmp/asrs-ir.sock`.
+
+**Terminal 2 - FastAPI backend:**
 
 ```bash
-cd ASRS
 .venv/bin/python -m uvicorn app:app --host 0.0.0.0 --port 8000
 ```
 
@@ -130,18 +154,24 @@ Check that the backend is running:
 curl http://127.0.0.1:8000/health
 ```
 
-Expected output: `{"status":"ok"}`.
+Expected output:
 
+```json
+{"status":"ok"}
+```
+
+**Terminal 3 - frontend development server:**
+
+```bash
+cd frontend
+pnpm dev
+```
+
+Open `http://127.0.0.1:8848` in a browser.
 
 ## Usage
 
-Open the frontend:
-
-```text
-http://127.0.0.1:8848
-```
-
-Then:
+In the web workbench:
 
 1. Upload one LLVM IR file with the `.ll` suffix.
 2. Enter the target service scenario, for example `-n -v`.
@@ -156,12 +186,13 @@ cat -n
 
 ## Command-Line Usage
 
-AgentSysFilter can also be run from the command line for debugging:
+AgentSysFilter can also be run from the repository root for debugging. Keep the `asrs-ird` daemon running in another terminal:
 
 ```bash
-cd ASRS
 .venv/bin/python run_analysis.py /path/to/program.ll -n -v
 ```
+
+Use `--none` to analyze a plain invocation with no arguments, or omit program arguments to explore all paths.
 
 ## Output
 
